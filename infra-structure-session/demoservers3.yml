@@ -1,0 +1,157 @@
+Description: >
+  Ugur Kocak / Udacity 2023
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+  myLaunchTemplateVersionNumber:
+    Type: String
+    Default: 1
+
+Resources:
+  LBSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our load balancer
+      VpcId: # VPC ID in which you are creating the Security Group.
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      # The security group below with ingress/egress rules allowing traffic on port 80 using TCP protocol from/to any location:
+      SecurityGroupIngress: #inbound traffic, inbound rules associated with the security group.
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0 #allow traffic from anywhere
+      SecurityGroupEgress: #outbound traffic, outbound rules associated with the security group.
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+        CidrIp: 0.0.0.0/0
+  WebServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our hosts and SSH from local only
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp #opening an ssh port to connect to a linux server to be able to throubleshoot, manage or install software, e.g. look at a log file
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 10.0.0.59/32 #0.0.0.0/0 #10.0.0.59/32 #private ip-address of jump-box server in public subnet
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535 #end port
+        CidrIp: 0.0.0.0/0
+  #In a Launch configuration, the only required properties are ImageId and Instance Type. The remaining ones are optional.
+  myWebAppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            yum update -y
+            yum install -y httpd
+            sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
+            systemctl start httpd
+            systemctl enable httpd
+        ImageId: ami-0a261c0e5f51090b1 # ami-0f1cf34dcb4057a5f ubuntu based linux ami from eu-central-1 # ToDo: AMI ID of Ubuntu Linux machine. To get one, try creating a VM from the web console.
+        # id of what you're trying to run, virtual machines run on base of an image, operating system (windows,linux) are baked into a big file
+        # this file gets loaded at boot time for these virtual machines
+        KeyName: private-server-devops-key # change this valus as applicable to you. ssh key to allow to login on port 22; We already had a user key-pair with the name mykey in our accout ... use the one you have
+        SecurityGroupIds: # todo: change this valus as applicable to you => create ourinfrastack & security groups & LaunchConfiguration & AutoScalingGroup (create demoserverstack1 & update  demoserverstack1 with demoservers2.yml).     
+          - sg-0edd97de3f26f51cc  # then note the security group id from AWS console todo: use web server SecurityGroup ID
+        InstanceType: t3.micro # Amazon nomenclature for a specific machine which is how much RAM and which CPU
+        # Specifying here that we need 10 GB hard drive for this machine and one drive is enough
+        BlockDeviceMappings:
+          - DeviceName: "/dev/sdk" # where do I put the hard drive, mount point where you can create folders
+            Ebs:
+              VolumeSize: '10' # how much Hard-drive space this machine going to need
+  WebAppGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub "${EnvironmentName}-PRIV-NETS" # list of subnet IDs for a virtual private cloud (VPC) where instances in the Auto Scaling group can be created
+      LaunchTemplate:
+        LaunchTemplateId: !Ref myWebAppLaunchTemplate # mandantory
+        Version: !Ref myLaunchTemplateVersionNumber # mandantory
+      MinSize: "3"
+      MaxSize: "5"
+      TargetGroupARNs: # target group is a group of registered instances, to whom the traffic will be routed
+      - Ref: WebAppTargetGroup # ARN (Amazon Resource Names) serves as a unique ID for any resource
+  # Our load balancer will be present in the public subnet, and use the dedicated security group we created earler
+  # load balancer is not a single point of failure, instead it will have a single entry point into your web application => LB has more than one copy of service
+  # when one of them dies, you still provide your servce
+  WebAppLB:  
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer 
+    Properties:
+      Subnets: # Load balancer asks for specific subnets, in this case we are providing subnet1 & subnet2
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUB1-SN"
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUB2-SN"
+      SecurityGroups:
+      - Ref: LBSecGroup
+  Listener: # Load Balancer requires listener that is going to send traffic to the target group WebAppTargetGroup
+    # process that checks for connection requests using the protocol and port that you specify in your code
+    # check for the load balancer's connection requests on the HTTP protocol port 80 directed towards the target group
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: WebAppTargetGroup
+      LoadBalancerArn:
+        Ref: WebAppLB
+      Port: '80'   # could be 443 for Secure HTTP, for secure http you need a security certificate or SSL certificate
+      Protocol: HTTP
+  # A Listener requires a Listener Rule. 
+  # The Listener Rule below will determine how (condition) the load balancer's connection requests are routed to the registered targets
+  # this listener rule will route all connection requests with the default root (/) endpoint to the specified target group.  
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward # forward requests to the specified target group
+        TargetGroupArn: !Ref 'WebAppTargetGroup'
+      Conditions:
+      - Field: path-pattern
+        Values: [/] # Load Balancer listens to this path, here you can change the path for different applications
+        # this  listener rule will route all connection requests with the default root (/) endpoint to the specified target group
+        # if our application served two different API endpoints, we could have created a dedicated target group for each API endpoint
+        # The listener rule will correspondingly route the first endpoint's connection requests to one target group and the requests for other 
+        # endpoints to the second target group
+      ListenerArn: !Ref 'Listener'
+      Priority: 1
+  WebAppTargetGroup: # if we reach for this machine and we get a Web page (http resonse code 200) and everything is OK => LB will start passing user requests into this machine
+    # otherweise the service unhealthy and then the AutoScaling will take it from there, eliminate it and create a new one
+    # Health Checks are the requests your Application Load Balancer sends to its registered targets
+    # these requests test the status of these targets
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: # health check properties for lead balancer testing status of these targets
+      HealthCheckIntervalSeconds: 30 # time it takes to determine a non-responsive target is unhealthy
+      HealthCheckPath: / #path to check on web server
+      HealthCheckProtocol: HTTP # protocol the load balancer uses when performing health checks on targets
+      HealthCheckTimeoutSeconds: 15 # if LB sends request to web server and doesn't get a reponse in 8 seconds => then it will consider as an unhealthy response
+      # number of healthy/unhealthy checks required to change the health status
+      HealthyThresholdCount: 2 # if you get 2 valid responses from a server, each one seperated by the interval which is 10 seconds (HealthCheckIntervalSeconds), 
+      # then reponse will be declared healthy, and will start receiving traffic
+      #number of consecutive health check successes required before considering an unhealthy target healthy     
+      UnhealthyThresholdCount: 5 # if the Load Balancer retries 5 times and doesn't get HTTP 200 => it will declare service unhealthy and 
+      # that happens in an interval set to 10 seconds
+      # number of consecutive health check failures required before considering a target unhealthy
+      Port: 8080 #port where our targets receive traffic
+      # go to port 8080 of the instances of the auto-scaling group => check for an HTTP response  
+      Protocol: HTTP
+      VpcId: # in which VPC the resource is created
+        Fn::ImportValue:
+          Fn::Sub: "${EnvironmentName}-VPCID"

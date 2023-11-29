@@ -1,0 +1,167 @@
+Parameters:
+    EnvironmentName:
+        Description: An environment name that will be prefixed to resource names
+        Type: String
+    VpcCIDR:
+        Description: Please enter the IP range (CIDR notation) for this VPC
+        Type: String
+        Default: 10.0.0.0/16
+    PrivateSubnet1CIDR:
+        Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+        Type: String
+        Default: 10.0.2.0/24
+    PrivateSubnet2CIDR:
+        Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+        Type: String
+        Default: 10.0.3.0/24
+    OnPremGateway:
+        Description: Please enter the IP address of the on-prem VPN Appliance
+        Type: String
+        Default: 10.0.4.0
+Resources:
+    VPC:
+        Type: AWS::EC2::VPC
+        Properties:
+            CidrBlock: !Ref VpcCIDR
+            EnableDnsHostnames: true
+            Tags:
+                - Key: Name
+                  Value: !Ref EnvironmentName
+
+
+    # Create 2 public subnets each in AZ0 and AZ1, except for the changed value in the field MapPublicIpOnLaunch: true.
+    # Marking this field as True will enable the Auto-assign public IP address field of the public subnet
+
+    PrivateSubnet1:
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC # referencing to the VPC created earlier
+            AvailabilityZone: !Select [0, !GetAZs ""] # Notice that our private subnets are not sharing availability zones.
+            # We are keeping them separated as we displayed in our diagrams from the previous lesson.
+            # To do so, the !GetAZs‘’ function fetches the list of AZs in your region which are indexed 0, 1, etc.
+            # Then, the !select [0, !GetAZs‘’] returns only the first AZ.
+            CidrBlock: !Ref PrivateSubnet1CIDR # referencing to PrivateSubnet1CIDR parameter
+            MapPublicIpOnLaunch: false
+            Tags:
+                - Key: Name
+                  Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+
+    PrivateSubnet2:
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC # referencing to the VPC created earlier
+            AvailabilityZone: !Select [1, !GetAZs ""] # the!Select [ 0, !GetAZs '' ] is returning the first AZ from the list of all AZs in your region.
+            # Similarly, for PrivateSubnet2, the !Select [ 1, !GetAZs '' ] will return the second AZ.
+            CidrBlock: !Ref PrivateSubnet2CIDR # referencing to PrivateSubnet2CIDR parameter
+            MapPublicIpOnLaunch: false
+            Tags:
+                - Key: Name
+                  Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+
+    PrivateRouteTable1:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref VPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+
+    # route DefaultPrivateRoute1 is attached to the PrivateRouteTable1 and is routed via NatGateway1
+    # routing traffic to wildcard address 0.0.0.0/0 then send this traffic to NatGateway1, don't exit to the outside
+    # keep traffic for private subnets within VPC
+    DefaultPrivateRoute1:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref VPCVGW
+    # servers within private subnet don't have IP Address
+    # even placing them on a public subnet, there is no way to access them if they have no IP address
+
+    # associate PrivateSubnet1 with rule DefaultPrivateRoute1 from route table PrivateRouteTable1
+    PrivateSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            SubnetId: !Ref PrivateSubnet1
+
+    PrivateRouteTable2:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref VPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${EnvironmentName} Private Routes (AZ2)
+
+    DefaultPrivateRoute2:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref VPCVGW
+
+    PrivateSubnet2RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            SubnetId: !Ref PrivateSubnet2
+
+    OurVPN:        
+        Type: "AWS::EC2::VPNConnection"
+        Properties: 
+            Type: ipsec.1
+            StaticRoutesOnly: true
+            CustomerGatewayId: 
+                !Ref ONPREMCGW
+            VpnGatewayId: 
+                !Ref VPCVGW
+    VPCVGW:
+        Type: "AWS::EC2::VPNGateway"
+        Properties: 
+            Type: ipsec.1
+            Tags:
+                - Key: Name
+                  Value: !Sub "${EnvironmentName} Amazon-side Gateway"
+    AttachVpnGateway:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+            VpcId:
+                !Ref VPC
+            VpnGatewayId:
+                !Ref VPCVGW
+    ONPREMCGW:
+        Type: "AWS::EC2::CustomerGateway"
+        Properties:
+            BgpAsn : 65000
+            IpAddress: !Ref 'OnPremGateway'
+            Tags:
+                - Key: Name
+                  Value: !Sub "${EnvironmentName} On Prem Gateway"
+            Type: ipsec.1
+
+Outputs:
+# use this resources in other scripts or files
+    VPC:
+        Description: A reference to the created VPC
+        Value: !Ref VPC # referencing to the VPC created earlier
+        Export:
+            Name: !Sub ${EnvironmentName}-VPCID # Substitution of EnvironmentName from parameter 
+            # Ref takes ID 
+
+    VPCVGW:
+        Description: A reference to the created VPNGateway
+        Value: !Ref VPCVGW
+        Export:
+            Name: !Sub ${EnvironmentName}-VPN-GTW-ID
+
+    AttachVpnGateway:
+        Description: A reference to the created VPCGatewayAttachment
+        Value: !Ref AttachVpnGateway
+        Export:
+            Name: !Sub ${EnvironmentName}-VPN-GTW-ATT-ID
+
+    ONPREMCGW:
+        Description: A reference to the created CustomerGateway
+        Value: !Ref ONPREMCGW
+        Export:
+            Name: !Sub ${EnvironmentName}-VPN-CUSTOMER-GTW-ID

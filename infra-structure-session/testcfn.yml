@@ -1,0 +1,12 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Ugur Kocak / Udacity - This template deploys a VPC 
+Parameters: 
+    EnvironmentName:
+        Description: declares the env name
+        Type: String 
+Resources:
+    UdacityVPC3:
+        Type: AWS::EC2::VPC
+        Properties:
+            CidrBlock: 10.0.0.0/16
+            EnableDnsHostnames: true

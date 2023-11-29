@@ -1,0 +1,258 @@
+Parameters:
+    EnvironmentName:
+        Description: An environment name that will be prefixed to resource names
+        Type: String
+
+    VpcCIDR:
+        Description: Please enter the IP range (CIDR notatio) for this VPC
+        Type: String
+        Default: 10.0.0.0/16
+
+    PublicSubnet1CIDR:
+        Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+        Type: String
+        Default: 10.0.0.0/24
+
+    PublicSubnet2CIDR:
+        Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+        Type: String
+        Default: 10.0.1.0/24
+
+    PrivateSubnet1CIDR:
+        Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+        Type: String
+        Default: 10.0.2.0/24
+    PrivateSubnet2CIDR:
+        Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+        Type: String
+        Default: 10.0.3.0/24
+Resources:
+    VPC:
+        Type: AWS::EC2::VPC
+        Properties:
+            CidrBlock: !Ref VpcCIDR
+            EnableDnsHostnames: true
+            Tags:
+                - Key: Name
+                  Value: !Ref EnvironmentName
+    InternetGateway:
+        Type: AWS::EC2::InternetGateway
+        Properties:
+            Tags:
+                - Key: Name
+                  Value: !Ref EnvironmentName
+    InternetGatewayAttachment:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+            InternetGatewayId: !Ref InternetGateway
+            VpcId: !Ref VPC # referencing to the VPC created earlier
+
+    # Create 2 public subnets each in AZ0 and AZ1, except for the changed value in the field MapPublicIpOnLaunch: true.
+    # Marking this field as True will enable the Auto-assign public IP address field of the public subnet
+
+    PublicSubnet1:
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC # referencing to the VPC created earlier
+            AvailabilityZone: !Select [0, !GetAZs ""]
+            CidrBlock: !Ref PublicSubnet1CIDR # referencing to PublicSubnet1CIDR parameter
+            MapPublicIpOnLaunch: true # do the subnet gets automatically an IP address
+            Tags: # Name your subnets using tags, to keep track when you create many subnets.
+                - Key: Name
+                  Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+
+    PublicSubnet2:
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC # referencing to the VPC created earlier
+            AvailabilityZone: !Select [1, !GetAZs ""]
+            CidrBlock: !Ref PublicSubnet2CIDR # referencing to PublicSubnet2CIDR parameter
+            MapPublicIpOnLaunch: true
+            Tags:
+                - Key: Name
+                  Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
+
+    PrivateSubnet1:
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC # referencing to the VPC created earlier
+            AvailabilityZone: !Select [0, !GetAZs ""] # Notice that our private subnets are not sharing availability zones.
+            # We are keeping them separated as we displayed in our diagrams from the previous lesson.
+            # To do so, the !GetAZs‘’ function fetches the list of AZs in your region which are indexed 0, 1, etc.
+            # Then, the !select [0, !GetAZs‘’] returns only the first AZ.
+            CidrBlock: !Ref PrivateSubnet1CIDR # referencing to PrivateSubnet1CIDR parameter
+            MapPublicIpOnLaunch: false
+            Tags:
+                - Key: Name
+                  Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+
+    PrivateSubnet2:
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC # referencing to the VPC created earlier
+            AvailabilityZone: !Select [1, !GetAZs ""] # the!Select [ 0, !GetAZs '' ] is returning the first AZ from the list of all AZs in your region.
+            # Similarly, for PrivateSubnet2, the !Select [ 1, !GetAZs '' ] will return the second AZ.
+            CidrBlock: !Ref PrivateSubnet2CIDR # referencing to PrivateSubnet2CIDR parameter
+            MapPublicIpOnLaunch: false
+            Tags:
+                - Key: NameAW
+                  Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+
+# The EIP in AWS::EC2::EIP stands for Elastic IP. 
+# This will give us a known/constant IP address to use instead of a disposable or ever-changing IP address. 
+# This is important when you have applications that depend on a particular IP address
+    NatGateway1EIP:
+        Type: AWS::EC2::EIP
+        DependsOn: InternetGatewayAttachment
+        Properties:
+            Domain: vpc
+
+# Use the DependsOn attribute to protect your dependencies from being created without the proper requirements. 
+# In the scenario above the EIP allocation will only happen after the InternetGatewayAttachment has completed
+    NatGateway2EIP:
+        Type: AWS::EC2::EIP
+        DependsOn: InternetGatewayAttachment
+        Properties:
+            Domain: vpc
+
+    NatGateway1:
+        Type: AWS::EC2::NatGateway
+        Properties:
+            AllocationId: !GetAtt NatGateway1EIP.AllocationId
+            SubnetId: !Ref PublicSubnet1
+
+    NatGateway2:
+        Type: AWS::EC2::NatGateway
+        Properties:
+            AllocationId: !GetAtt NatGateway2EIP.AllocationId
+            SubnetId: !Ref PublicSubnet2
+
+    PublicRouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref VPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${EnvironmentName} Public Routes
+
+    DefaultPublicRoute: 
+        Type: AWS::EC2::Route
+        DependsOn: InternetGatewayAttachment # not neccessary, depends on an InternetGatewayAttachment properly working. 
+        # only used when InternetGateway is attached to VPC and not in any other time during the creation of these resources
+        Properties: 
+            RouteTableId: !Ref PublicRouteTable
+            DestinationCidrBlock: 0.0.0.0/0 # rule means: if you're routing traffic to any address (0.0.0.0 is wildcard address or all addresses), 
+            #  they will be routed to this particular resource in GatewayId InternetGateway
+            # 0.0.0.0 means just send traffic to InternetGateway
+            # destination matching and a wildcard address (0.0.0/0) to reference all traffic.
+            # when we use the wildcard address 0.0.0.0/0, we are saying for any address that is destined for any IP address in the world, 
+            # send it to the referenced GatewayId
+            GatewayId: !Ref InternetGateway
+
+#VPC have route table with routes but could have multiple subnets. SubnetRouteTableAssociation associates a rules to subnets 
+    PublicSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRouteTable
+            SubnetId: !Ref PublicSubnet1
+
+    PublicSubnet2RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRouteTable
+            SubnetId: !Ref PublicSubnet2
+    
+
+    PrivateRouteTable1:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref VPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+
+    # route DefaultPrivateRoute1 is attached to the PrivateRouteTable1 and is routed via NatGateway1
+    # routing traffic to wildcard address 0.0.0.0/0 then send this traffic to NatGateway1, don't exit to the outside
+    # keep traffic for private subnets within VPC
+    DefaultPrivateRoute1:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId: !Ref NatGateway1
+    # servers within private subnet don't have IP Address
+    # even placing them on a public subnet, there is no way to access them if they have no IP address
+
+    # associate PrivateSubnet1 with rule DefaultPrivateRoute1 from route table PrivateRouteTable1
+    PrivateSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            SubnetId: !Ref PrivateSubnet1
+
+    PrivateRouteTable2:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref VPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${EnvironmentName} Private Routes (AZ2)
+
+    DefaultPrivateRoute2:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId: !Ref NatGateway2
+
+    PrivateSubnet2RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            SubnetId: !Ref PrivateSubnet2
+
+Outputs:
+# use this resources in other scripts or files
+#  we are returning the id of our VPC as well as our Environment's Name:
+    VPC:
+        Description: A reference to the created VPC
+        Value: !Ref VPC # referencing to the VPC created earlier
+        Export:
+            Name: !Sub ${EnvironmentName}-VPCID # Substitution of EnvironmentName from parameter 
+
+    PublicSubnets:
+        Description: A list of the public subnets
+        Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2]]  # join means put several strings together
+        Export:
+            Name: !Sub ${EnvironmentName}-PUB-NETS
+            # Ref get ID of  PublicSubnet1 and PublicSubnet2
+
+    PrivateSubnets:
+        Description: A list of the private subnets
+        Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+        Export:
+            Name: !Sub ${EnvironmentName}-PRIV-NETS
+
+    PublicSubnet1:
+        Description: A reference to the public subnet in the 1st Availability Zone
+        Value: !Ref PublicSubnet1
+        Export:
+            Name: !Sub ${EnvironmentName}-PUB1-SN
+
+    PublicSubnet2:
+        Description: A reference to the public subnet in the 2nd Availability Zone
+        Value: !Ref PublicSubnet2
+        Export:
+            Name: !Sub ${EnvironmentName}-PUB2-SN
+
+    PrivateSubnet1:
+        Description: A reference to the private subnet in the 1st Availability Zone
+        Value: !Ref PrivateSubnet1
+        Export:
+            Name: !Sub ${EnvironmentName}-PRI1-SN
+
+    PrivateSubnet2:
+        Description: A reference to the private subnet in the 2nd Availability Zone
+        Value: !Ref PrivateSubnet2
+        Export:
+            Name: !Sub ${EnvironmentName}-PRI2-SN
