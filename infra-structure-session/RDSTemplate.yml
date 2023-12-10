@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+  myUsername:
+    Description: Any username
+    Type: String 
+  myPassword:
+    Description: A password with at least 8 characters
+    Type: String 
+
+Resources:
+  myDBSubnetGroup1: 
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupName: "myDBSubnetGroup1"
+      DBSubnetGroupDescription: creates a database subnet group. Subnet groups must contain at least two subnets in two different Availability Zones in the same region
+      SubnetIds:  
+         - Fn::ImportValue: !Sub ${EnvironmentName}-PRI1-SN
+         - Fn::ImportValue: !Sub ${EnvironmentName}-PRI2-SN
+      Tags:      
+          - Key: Name
+            Value: !Sub ${EnvironmentName} DB Subnet Group
+  MyDB:
+    Type: "AWS::RDS::DBInstance"
+    DeletionPolicy: "Retain"
+    Properties:
+      DBSubnetGroupName: !Ref myDBSubnetGroup1
+      Engine: aurora-mysql
+      VPCSecurityGroups: [sg-0330d3f4051073cb0]
+      PubliclyAccessible: false
+      MultiAZ: false
+      AllocatedStorage: 20
+      DBInstanceClass: db.t2.small
+      Engine: "mysql"
+      MasterUsername: !Sub "${myUsername}"
+      MasterUserPassword: !Sub "${myPassword}"
+      Tags: 
+        - 
+          Key: "Name"
+          Value: !Sub "${EnvironmentName} MS SQL RDS"
+
+
+
+
+
+
