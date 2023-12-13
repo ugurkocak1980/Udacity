@@ -95,7 +95,7 @@ Resources:
             CidrBlock: !Ref PrivateSubnet2CIDR # referencing to PrivateSubnet2CIDR parameter
             MapPublicIpOnLaunch: false
             Tags:
-                - Key: NameAW
+                - Key: Name
                   Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
 
 # The EIP in AWS::EC2::EIP stands for Elastic IP. 

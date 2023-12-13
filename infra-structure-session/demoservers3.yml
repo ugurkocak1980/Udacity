@@ -66,6 +66,8 @@ Resources:
             sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
             systemctl start httpd
             systemctl enable httpd
+            cd /var/www/html
+            echo "Udacity Demo Web Server Up and Running!" > index.html
         ImageId: ami-0a261c0e5f51090b1 # ami-0f1cf34dcb4057a5f ubuntu based linux ami from eu-central-1 # ToDo: AMI ID of Ubuntu Linux machine. To get one, try creating a VM from the web console.
         # id of what you're trying to run, virtual machines run on base of an image, operating system (windows,linux) are baked into a big file
         # this file gets loaded at boot time for these virtual machines
@@ -137,7 +139,7 @@ Resources:
     # Health Checks are the requests your Application Load Balancer sends to its registered targets
     # these requests test the status of these targets
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties: # health check properties for lead balancer testing status of these targets
+    Properties: # health check properties for load balancer testing status of these targets
       HealthCheckIntervalSeconds: 30 # time it takes to determine a non-responsive target is unhealthy
       HealthCheckPath: / #path to check on web server
       HealthCheckProtocol: HTTP # protocol the load balancer uses when performing health checks on targets
