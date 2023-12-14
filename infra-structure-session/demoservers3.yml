@@ -67,6 +67,7 @@ Resources:
             systemctl start httpd
             systemctl enable httpd
             cd /var/www/html
+            sudo chown ec2-user html/
             echo "Udacity Demo Web Server Up and Running!" > index.html
         ImageId: ami-0a261c0e5f51090b1 # ami-0f1cf34dcb4057a5f ubuntu based linux ami from eu-central-1 # ToDo: AMI ID of Ubuntu Linux machine. To get one, try creating a VM from the web console.
         # id of what you're trying to run, virtual machines run on base of an image, operating system (windows,linux) are baked into a big file

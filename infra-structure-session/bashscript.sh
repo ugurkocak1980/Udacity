@@ -27,3 +27,41 @@ yum install -y httpd
 sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
 systemctl start httpd
 systemctl enable httpd
+
+
+UserData: # Script that will run on the new instance automatically after launch
+# script will first install the Apache Tomcat server, starting the server, and then create an index.html page at the default location, /var/www/html.
+Fn::Base64: !Sub |
+#!/bin/bash
+yum update -y
+yum install -y httpd
+sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
+systemctl start httpd
+systemctl enable httpd      
+cd /var/www/html
+sudo chown ec2-user html/
+echo "Udacity Demo Web Server Up and Running!" > index.html     
+
+
+Fn::Base64: !Sub |
+    #!/bin/bash
+        apt-get update -y
+        apt-get install unzip awscli -y
+        apt-get install apache2 -y
+        systemctl start apache2.service
+        cd /var/www/html
+        aws s3 cp s3://your-bucket-address/udacity.zip .
+        unzip -o udacity.zip
+
+#aws s3 cp s3://udacity-demo-1/udacity.zip
+
+UserData: 
+    Fn::Base64: !Sub |
+        #!/bin/bash -xe
+        exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+        apt update -y
+        apt install -y apache2
+        systemctl start apache2
+        systemctl enable apache2
+        rm ../../var/www/html/index.html
+        wget -P ../../var/www/html https://s3.us-east-2.amazonaws.com/test-udagram-1/index.html
