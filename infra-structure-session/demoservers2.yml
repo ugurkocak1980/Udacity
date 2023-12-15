@@ -35,8 +35,8 @@ Resources:
           !Sub "${EnvironmentName}-VPCID"
       SecurityGroupIngress:
       - IpProtocol: tcp
-        FromPort: 8080
-        ToPort: 8080
+        FromPort: 80
+        ToPort: 80
         CidrIp: 0.0.0.0/0
       - IpProtocol: tcp #opening an ssh port to connect to a linux server to be able to throubleshoot, manage or install software, e.g. look at a log file
         FromPort: 22
@@ -54,23 +54,16 @@ Resources:
       UserData: # Script that will run on the new instance automatically after launch
       # script will first install the Apache Tomcat server, starting the server, and then create an index.html page at the default location, /var/www/html.
         Fn::Base64: !Sub |
-          #!/bin/bash
-          yum update -y
-          yum install -y httpd
-          sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
-          systemctl start httpd
-          systemctl enable httpd      
-          cd /var/www
-          sudo chown ec2-user html/
-          cd html
-          wget https://ugurkocakbucket.s3.eu-central-1.amazonaws.com/udacity.zip
-          unzip udacity.zip
-          rm udacity.zip      
+          sudo apt-get update -y
+          sudo apt-get install apache2 -y
+          sudo systemctl start apache2.service
+          cd /var/www/html
+          echo "Udacity Demo Web Server Up and Running!" > index.html      
       # ToDo: AMI ID of Ubuntu Linux machine. To get one, try creating a VM from the web console. 
       # id of what you're trying to run, virtual machines run on base of an image, operating system (windows,linux) are baked into a big file 
       # this file gets loaded at boot time for these virtual machines
       # AMI IDs are specific to the region and keep changing with updates in the image
-      ImageId: ami-0669b163befffbdfc # ami-0a261c0e5f51090b1
+      ImageId: ami-03cea216f9d507835 # ami-0669b163befffbdfc # ami-0a261c0e5f51090b1
       # ToDo: Change the key-pair name, as applicable to you. 
       KeyName: mykey # ssh key to allow to login on port 22. Assumed that the RSA login key name is VocareumKey2. 
       #Please create a key-pair with the name VocareumKey2 (or any name) in the AWS web console (under EC2 services) before using it in the code above.

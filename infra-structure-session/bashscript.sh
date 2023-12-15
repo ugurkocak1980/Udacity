@@ -14,11 +14,11 @@
 
 
 #!/bin/bash
-        apt-get update -y
-        apt-get install apache2 -y
-        systemctl start apache2.service
-        cd /var/www/html
-        echo "Udacity Demo Web Server Up and Running!" > index.html        
+apt-get update -y
+apt-get install apache2 -y
+systemctl start apache2.service
+cd /var/www/html
+echo "Udacity Demo Web Server Up and Running!" > index.html        
 
 
 #!/bin/bash
@@ -65,3 +65,58 @@ UserData:
         systemctl enable apache2
         rm ../../var/www/html/index.html
         wget -P ../../var/www/html https://s3.us-east-2.amazonaws.com/test-udagram-1/index.html
+
+
+        aws s3api get-object --bucket ugurkocakbucket --key udacity.zip udacity.zip --region eu-central-1
+
+
+
+
+Fn::Base64: !Sub |
+    #!/bin/bash
+    yum update -y
+    yum install -y httpd
+    sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
+    systemctl start httpd
+    systemctl enable httpd      
+    cd /var/www/html
+    sudo chown ec2-user html/
+    echo "Udacity Demo Web Server Up and Running!" > index.html   
+
+
+    Fn::Base64: !Sub |
+        #!/bin/bash
+        yum update -y
+        yum install -y httpd
+        sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
+        systemctl start httpd
+        systemctl enable httpd      
+        cd /var/www
+        sudo chown ec2-user html/
+        cd html
+        wget https://ugurkocakbucket.s3.eu-central-1.amazonaws.com/udacity.zip
+        unzip udacity.zip
+        rm udacity.zip               
+
+
+ Fn::Base64: !Sub |
+    #!/bin/bash
+    yum update -y
+    yum install -y httpd
+    sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
+    systemctl start httpd
+    systemctl enable httpd      
+    cd /var/www
+    sudo chown ec2-user html/
+    cd html
+    wget https://ugurkocakbucket.s3.eu-central-1.amazonaws.com/udacity.zip
+    unzip udacity.zip
+    rm udacity.zip 
+
+sudo apt-get update -y
+sudo apt-get install apache2 -y
+sudo systemctl start apache2.service
+cd /var/www/
+sudo chown ubuntu html/*
+cd html/
+sudo echo "WellDone ! Udacity Demo Web Server Up and Running!" > index.html

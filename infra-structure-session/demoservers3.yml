@@ -72,9 +72,9 @@ Resources:
         ImageId: ami-0a261c0e5f51090b1 # ami-0f1cf34dcb4057a5f ubuntu based linux ami from eu-central-1 # ToDo: AMI ID of Ubuntu Linux machine. To get one, try creating a VM from the web console.
         # id of what you're trying to run, virtual machines run on base of an image, operating system (windows,linux) are baked into a big file
         # this file gets loaded at boot time for these virtual machines
-        KeyName: private-server-devops-key # change this valus as applicable to you. ssh key to allow to login on port 22; We already had a user key-pair with the name mykey in our accout ... use the one you have
+        #KeyName: private-server-devops-key # change this valus as applicable to you. ssh key to allow to login on port 22; We already had a user key-pair with the name mykey in our accout ... use the one you have
         SecurityGroupIds: # todo: change this valus as applicable to you => create ourinfrastack & security groups & LaunchConfiguration & AutoScalingGroup (create demoserverstack1 & update  demoserverstack1 with demoservers2.yml).     
-          - sg-0edd97de3f26f51cc  # then note the security group id from AWS console todo: use web server SecurityGroup ID
+          - sg-093b04d7d6d82fde9  # then note the security group id from AWS console todo: use web server SecurityGroup ID
         InstanceType: t3.micro # Amazon nomenclature for a specific machine which is how much RAM and which CPU
         # Specifying here that we need 10 GB hard drive for this machine and one drive is enough
         BlockDeviceMappings:
@@ -89,8 +89,8 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref myWebAppLaunchTemplate # mandantory
         Version: !Ref myLaunchTemplateVersionNumber # mandantory
-      MinSize: "3"
-      MaxSize: "5"
+      MinSize: "4"
+      MaxSize: "4"
       TargetGroupARNs: # target group is a group of registered instances, to whom the traffic will be routed
       - Ref: WebAppTargetGroup # ARN (Amazon Resource Names) serves as a unique ID for any resource
   # Our load balancer will be present in the public subnet, and use the dedicated security group we created earler
