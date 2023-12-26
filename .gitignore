@@ -1,2 +1,4 @@
 
 infra-structure-session/mykey.pem
+*.pem
+Continuous Integration and Continuous Deployment/jenkins.war

@@ -54,6 +54,7 @@ Resources:
       UserData: # Script that will run on the new instance automatically after launch
       # script will first install the Apache Tomcat server, starting the server, and then create an index.html page at the default location, /var/www/html.
         Fn::Base64: !Sub |
+          #!/bin/bash
           sudo apt-get update -y
           sudo apt-get install apache2 -y
           sudo systemctl start apache2.service
